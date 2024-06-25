@@ -15,6 +15,20 @@ while ($true) {
     # 獲取當前運行的進程
     $currentProcesses = Get-Process -Name $processName -ErrorAction SilentlyContinue
 
+    $currentProcessIds = $currentProcesses | ForEach-Object { $_.Id }
+
+    # 複製一份現有的進程ID列表以進行迭代
+    $existingProcessIds = @($existingProcesses.Keys)
+
+    # 檢查已存在的進程是否依然運行
+    foreach ($processId in $existingProcessIds) {
+        if (-not ($currentProcessIds -contains $processId)) {
+            # 移除已經關閉的進程
+            $existingProcesses.Remove($processId) | Out-Null
+            Write-Output "進程 ID $processId 已關閉，從列表中移除" (Get-Date)
+        }
+    }
+
     if ($currentProcesses) {
         foreach ($process in $currentProcesses) {
             if (-not $existingProcesses.ContainsKey($process.Id)) {
@@ -50,13 +64,13 @@ while ($true) {
                 }
 
                 # 顯示新進程信息
-                Write-Output "偵測到新的進程 ID $($process.Id)，名稱為 $($process.ProcessName)，將其設置為使用單一核心:$randomCore"
+                Write-Output "偵測到新的進程 ID $($process.Id)，名稱為 $($process.ProcessName)，將其設置為使用單一核心:$randomCore" (Get-Date)
             }
         }
     }
 
-    # 顯示目前已檢測到的所有進程及其信息
-    Write-Output "`n目前已檢測到的進程信息："
+    # 顯示目前已檢測到的所有進程及其信息，並添加當前的日期時間
+    Write-Output "`n目前已檢測到的進程信息：" (Get-Date)
     foreach ($processId in $existingProcesses.Keys) {
         $processInfo = $existingProcesses[$processId]
         Write-Output "進程 ID: $processId，名稱: $($processInfo.ProcessName)，使用核心: $($processInfo.UsedCores -join ', ')"

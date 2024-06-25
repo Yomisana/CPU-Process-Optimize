@@ -4,8 +4,11 @@ $processName = "msedgewebview2"
 # 設定檢查間隔時間（秒）
 $interval = 5
 
-# 用於儲存已檢測到的進程 ID 和其使用的核心
-$existingProcesses = @()
+# 取得系統總的邏輯處理器數量
+$totalCores = [Environment]::ProcessorCount
+
+# 用於儲存已檢測到的進程 ID
+$existingProcesses = @{}
 
 # 持續監測進程
 while ($true) {
@@ -14,7 +17,7 @@ while ($true) {
 
     if ($currentProcesses) {
         foreach ($process in $currentProcesses) {
-            if ($process.Id -notin ($existingProcesses.ProcessId)) {
+            if (-not $existingProcesses.ContainsKey($process.Id)) {
                 # 新進程被檢測到，顯示相關信息
                 $usedCores = @()
                 $affinity = $process.ProcessorAffinity
@@ -29,14 +32,19 @@ while ($true) {
                     $coreIndex++
                 }
 
-                # 顯示新進程信息
-                Write-Output "偵測到新的進程 ID $($process.Id)，名稱為 $($process.ProcessName)，使用核心: $($usedCores -join ', ')"
+                # 從可用核心中隨機選擇一個核心
+                $random = New-Object System.Random
+                $randomCore = $random.Next(0, $totalCores)
 
-                # 將新進程加入到已檢測到的進程列表中
-                $existingProcesses += [PSCustomObject]@{
-                    ProcessId = $process.Id
-                    UsedCores = $usedCores -join ', '
-                }
+                # 設置進程只使用選定的核心
+                $newAffinity = [int][math]::Pow(2, $randomCore)
+                $process.ProcessorAffinity = [IntPtr]$newAffinity
+
+                # 顯示新進程信息
+                Write-Output "偵測到新的進程 ID $($process.Id)，名稱為 $($process.ProcessName)，將其設置為使用單一核心:$randomCore"
+
+                # 將新進程加入到已檢測到的進程字典中
+                $existingProcesses[$process.Id] = $true
             }
         }
     }

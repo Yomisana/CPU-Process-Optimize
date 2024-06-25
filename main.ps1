@@ -7,7 +7,7 @@ $interval = 5
 # 取得系統總的邏輯處理器數量
 $totalCores = [Environment]::ProcessorCount
 
-# 用於儲存已檢測到的進程 ID
+# 用於儲存已檢測到的進程 ID 和其使用的核心
 $existingProcesses = @{}
 
 # 持續監測進程
@@ -40,13 +40,26 @@ while ($true) {
                 $newAffinity = [int][math]::Pow(2, $randomCore)
                 $process.ProcessorAffinity = [IntPtr]$newAffinity
 
-                # 顯示新進程信息
-                Write-Output "偵測到新的進程 ID $($process.Id)，名稱為 $($process.ProcessName)，將其設置為使用單一核心:$randomCore"
+                # 更新使用的核心信息
+                $usedCores = @($randomCore)
 
                 # 將新進程加入到已檢測到的進程字典中
-                $existingProcesses[$process.Id] = $true
+                $existingProcesses[$process.Id] = @{
+                    ProcessName = $process.ProcessName
+                    UsedCores = $usedCores
+                }
+
+                # 顯示新進程信息
+                Write-Output "偵測到新的進程 ID $($process.Id)，名稱為 $($process.ProcessName)，將其設置為使用單一核心:$randomCore"
             }
         }
+    }
+
+    # 顯示目前已檢測到的所有進程及其信息
+    Write-Output "`n目前已檢測到的進程信息："
+    foreach ($processId in $existingProcesses.Keys) {
+        $processInfo = $existingProcesses[$processId]
+        Write-Output "進程 ID: $processId，名稱: $($processInfo.ProcessName)，使用核心: $($processInfo.UsedCores -join ', ')"
     }
 
     # 等待指定的間隔時間

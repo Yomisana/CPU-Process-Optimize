@@ -1,5 +1,5 @@
 # 如何使用
-1. 僅支援 Windows
+1. 僅支援 Windows none-support EPYC CPU yet
 2. 可以自訂要監控的處理程序名稱，設定好你要限制執行續的處理程序
 ```
 param (

@@ -1,8 +1,10 @@
 ﻿param (
-    [switch]$ShowProcessInfo = $true
+    [switch]$ShowProcessInfo = $true,
+    [int]$CoreCountPerProcess = 4  # 新增的參數，指定每個處理程序分配的核心數量，默認為 1
 )
 
 # 設定要監測的進程名稱(預設:針對 edge 的 webview2)
+# $processName = "conhost"
 $processName = "msedgewebview2"
 # $processName = "chrome"
 
@@ -15,6 +17,15 @@ $totalCores = [Environment]::ProcessorCount
 # 用於儲存已檢測到的進程 ID 和其使用的核心
 $existingProcesses = @{}
 $coreUsageCount = @{}
+
+# Check if running with administrator privileges
+if (-Not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')) {
+    if ([int](Get-CimInstance -Class Win32_OperatingSystem | Select-Object -ExpandProperty BuildNumber) -ge 6000) {
+        $CommandLine = "-NoExit -c `"cd '$pwd'; & '" + $MyInvocation.MyCommand.Path + "'`""
+        Start-Process powershell -Verb runas -ArgumentList $CommandLine
+        Exit
+    }
+}
 
 # 隨機選擇一個未被分配的核心，如果所有核心都被分配過，則選擇當前被使用次數最少的核心
 function Get-Next-Core {
@@ -52,33 +63,29 @@ while ($true) {
         foreach ($process in $currentProcesses) {
             if (-not $existingProcesses.ContainsKey($process.Id)) {
                 $usedCores = @()
-                $affinity = $process.ProcessorAffinity
-                $coreIndex = 0
+                $newAffinity = 0
 
-                while ($affinity -ne 0) {
-                    if ($affinity % 2 -eq 1) {
-                        $usedCores += $coreIndex
+                # 分配指定數量的核心給進程
+                for ($i = 0; $i -lt $CoreCountPerProcess; $i++) {
+                    $nextCore = Get-Next-Core
+                    $newAffinity += [int][math]::Pow(2, $nextCore)
+
+                    if (-not $coreUsageCount.ContainsKey($nextCore)) {
+                        $coreUsageCount[$nextCore] = 0
                     }
-                    $affinity = [math]::Floor($affinity / 2)
-                    $coreIndex++
+                    $coreUsageCount[$nextCore]++
+                    $usedCores += $nextCore
                 }
 
-                $nextCore = Get-Next-Core
-                $newAffinity = [int][math]::Pow(2, $nextCore)
+                # 設置進程的 CPU 親和性
                 $process.ProcessorAffinity = [IntPtr]$newAffinity
-
-                if (-not $coreUsageCount.ContainsKey($nextCore)) {
-                    $coreUsageCount[$nextCore] = 0
-                }
-                $coreUsageCount[$nextCore]++
-                $usedCores = @($nextCore)
 
                 $existingProcesses[$process.Id] = @{
                     ProcessName = $process.ProcessName
                     UsedCores   = $usedCores
                 }
 
-                Write-Output "偵測到新的進程 ID $($process.Id)，名稱為 $($process.ProcessName)，將其設置為使用單一核心:$nextCore" (Get-Date)
+                Write-Output "偵測到新的進程 ID $($process.Id)，名稱為 $($process.ProcessName)，將其設置為使用核心: $($usedCores -join ', ')" (Get-Date)
             }
         }
     }
